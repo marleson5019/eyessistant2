@@ -9,9 +9,10 @@ import { Platform } from 'react-native';
  * - PROD: será definido via variável de ambiente
  */
 
+// Use EXPO_PUBLIC_API_URL when definido (dev), senão usa o backend online publicado
 const API_BASE_URL =
   (process.env && process.env.EXPO_PUBLIC_API_URL) ||
-  'https://eyessistant-backend.onrender.com';
+  'https://eyessistant2-backend.onrender.com';
 
 export interface PredictionResult {
   prediction: 'normal' | 'catarata';
