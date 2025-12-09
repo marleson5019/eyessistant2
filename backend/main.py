@@ -6,15 +6,12 @@ try:
     import onnxruntime as ort
 except Exception:
     ort = None
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from PIL import Image
 import io
-from pydantic import BaseModel
-
-class ImageRequest(BaseModel):
-    image: str  # Base64 string
+import json
 
 # Inicializa FastAPI
 app = FastAPI(
@@ -157,7 +154,7 @@ async def predict(file: UploadFile = File(...)):
 
 
 @app.post("/predict-base64")
-async def predict_base64(request: ImageRequest):
+async def predict_base64(request: Request):
     """
     Realiza predição recebendo imagem em base64.
     Útil para integração com React Native.
@@ -167,25 +164,30 @@ async def predict_base64(request: ImageRequest):
             "image": "base64_string"
         }
     """
-    
     if session is None:
-        logger.warning("predict_base64: modelo não carregado, retornando fallback 'normal' com baixa confiança")
+        logger.warning("predict_base64: modelo não carregado")
         return JSONResponse({
             "prediction": "normal",
             "confidence": 0.5,
             "class_index": 0,
-            "message": "Modelo não disponível — resultado de fallback"
+            "message": "Modelo não disponível"
         })
     
     try:
         import base64
         
-        image_b64 = request.image
-        if not image_b64:
+        # Ler JSON do body
+        try:
+            body = await request.json()
+            image_base64 = body.get("image", "")
+        except:
+            image_base64 = ""
+        
+        if not image_base64:
             raise ValueError("Campo 'image' (base64) é obrigatório")
         
         # Decodifica base64 para bytes
-        image_data = base64.b64decode(image_b64)
+        image_data = base64.b64decode(image_base64)
         img = Image.open(io.BytesIO(image_data)).convert("RGB")
         
         # Redimensiona para 224x224
@@ -208,6 +210,7 @@ async def predict_base64(request: ImageRequest):
         pred_class = int(np.argmax(logits))
         pred_label = CLASS_NAMES.get(pred_class, "unknown")
         
+        logger.info(f"Predição: {pred_label} (confiança: {confidence:.4f})")
         return JSONResponse({
             "prediction": pred_label,
             "confidence": round(confidence, 4),
@@ -215,6 +218,7 @@ async def predict_base64(request: ImageRequest):
             "message": f"Análise concluída: {pred_label}"
         })
     
+
     except Exception as e:
         logger.exception("Erro no /predict-base64")
         raise HTTPException(status_code=400, detail=f"Erro ao processar imagem: {str(e)}")
